@@ -1,0 +1,23 @@
+# Environment variables
+.env
+
+# IDE files
+.vscode/
+.idea/
+
+# Compiled Java class files
+*.class
+
+# Compiled Python bytecode
+*.py[cod]
+
+# Log files
+*.log
+
+# Package files
+*.jar
+
+**/__pycache__/
+*/__pycache__/*
+__pycache__/
+/static/
