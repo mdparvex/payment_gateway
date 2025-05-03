@@ -35,12 +35,13 @@ def subscription_initiation(request):
 
             
             try:
-                print(subscribe_vendor.vendor_name)
+                print("subscription.classes.vendors." + subscribe_vendor.vendor_name)
                 module = importlib.import_module("subscription.classes.vendors." + subscribe_vendor.vendor_name)
-            except:
+            except Exception as e:
+                print(e)
                 content['message'] = 'Bad Request'
                 return JsonResponse(content, status=status.HTTP_400_BAD_REQUEST)
-
+            print(module)
             vendor_class = getattr(module, subscribe_vendor.vendor_name)
             vendor_obj = vendor_class()
             get_response = vendor_obj.custom(data=query_params, vendor_obj=subscribe_vendor)

@@ -8,21 +8,21 @@ from order.models.price import Price
 import datetime
 import json
 import importlib
+import stripe
 
 def create_payment_history(store_type, order, amount, date, status, event_type=""):
     PaymentHistory.objects.create(store_type=store_type, order=order, amount=amount, date=date, status=status,
                                   event_type=event_type)
     return
 
-class stripe(VendorInterface):
+class stripe_app(VendorInterface):
 
     def create(self, custom_var=None):
         pass
 
     def verify_card(self, data, vendor_obj):
-
-        secret_key = SubscribeVendor.config_data["secret_key"]
-
+        secret_key = vendor_obj.config_data["secret_key"]
+        print(f'secret key: {secret_key}')
         credit_card = None
         expiry_year = None
         expiry_month = None
@@ -57,7 +57,7 @@ class stripe(VendorInterface):
         email = None
         if 'email' in data['card']:
             email = data['card']['email']
-
+        print('inside function')
         try:
             customer = Customer.objects.get(credit_card=credit_card, expiry_year=expiry_year,
                                             expiry_month=expiry_month, street_number=street_number,
@@ -79,6 +79,7 @@ class stripe(VendorInterface):
                 name=first_name + " " + last_name,
                 metadata={"customer_id": customer.customer_id, 'vendor_id': vendor_obj.subscribe_vendor_id}
             )
+            print(f'stripe: {stripe_customer}')
             customer.third_party_id = stripe_customer['id']
             customer.third_party_additional_data = stripe_customer
 
@@ -92,12 +93,7 @@ class stripe(VendorInterface):
             raise Exception("Invalid Customer")
         if 'price_id' not in data:
             raise Exception("Invalid Price Id")
-        # if 'upsell_price_id' not in data:
-        #     raise Exception("Requires Upsell Price Field")
-        # if 'paypal_requested' in data and 'subscriptionId' not in data:
-        #     raise Exception("Requires Subscription Id for paypal request")
-
-        # check if customer order exists
+        
         try:
             customer = Customer.objects.get(customer_id=data['customer_id'])
            
@@ -115,40 +111,23 @@ class stripe(VendorInterface):
             pass
         except Customer.DoesNotExist:
             raise Exception('Invalid Customer')
-
-        # campaign = customer.campaign
-        # if "secret_key" in campaign.config_data:
-        #     secret_key = campaign.config_data["secret_key"]
-        # else:
-        #     raise Exception("Invalid Config in Campaign")
+        
+        prices = data['price_id']
+        pid = prices['id']
+        
         try:
             priceObj = Price.objects.get(price_id=pid)
         except Price.DoesNotExist:
             raise Exception("Invalid Price Id")
-        stripe.api_key = SubscribeVendor.config_data["secret_key"]
+        stripe.api_key = vendor_obj.config_data["secret_key"]
         stripe_items_to_purchase, coupon_code = [{'price': priceObj.custom_price_id['price_id']}], {}
-        prices = data['price_id']
-        #upsell_price_list = data['upsell_price_id']
-        total_amount, total_discount = 0.0, 0.0
-        # skip_days = 0
-        pid = prices['id']
-
-        stripe_coupon = ""
-
-        if prices['coupon'] != '':
-            coupon_code[pid] = prices['coupon']
 
         total_amount = priceObj.price_point
         
 
-        order = Order(customer_id=customer,order_price=priceObj, total_amount_charged=total_amount)
+        order = Order(customer_id=customer,order_price=priceObj, total_amount_charged=total_amount, plan_type=priceObj.plan_duration_days)
         order.save()
 
-        issuer_id = 'stripe'
-        exp = ['latest_invoice.payment_intent']
-        # trial_period_days = skip_days
-        # if skip_value > 0:
-        #     trial_period_days = 0
         primary_subscription = stripe.Subscription.create(
             customer=customer.third_party_id,
             items=stripe_items_to_purchase,
@@ -159,8 +138,8 @@ class stripe(VendorInterface):
                         'vendor_id': vendor_obj.subscribe_vendor_id}
 
         )
-        
-        client_secret = primary_subscription['latest_invoice']['payment_intent']['client_secret']
+        print(primary_subscription)
+        #client_secret = primary_subscription['latest_invoice']['payment_intent']['client_secret']
         order.order_data = primary_subscription
         order.customer_order_id = primary_subscription['id']
 
@@ -178,10 +157,7 @@ class stripe(VendorInterface):
             'receipt_id': order.order_id,
             'transaction_number': order.customer_order_id,
             'auth_code': '',
-            'issuer_id': issuer_id,
-            #'recur_success': recur_success,
-            'next_recur_date': '',
-            'client_secret': client_secret
+            'next_recur_date': ''
         }
         return json_response
     
@@ -195,8 +171,6 @@ class stripe(VendorInterface):
             raise Exception("Order Does not exist")
 
         order_prices = order_info.order_price
-        primary_active = order_info.order_price is not None
-        upsell_active = len(order_info.upsell_price.all()) > 0
 
         try:
             sub_status = SubscriptionStatus.objects.get(subscription_id=order_info.order_id)
@@ -272,11 +246,10 @@ class stripe(VendorInterface):
         }
         return response
     
-    def full_cancellation(self, order_info):
-        campaign = order_info.campaign
+    def full_cancellation(self, order_info,vendor_obj):
         
-        if "secret_key" in campaign.config_data:
-            secret_key = campaign.config_data["secret_key"]
+        if "secret_key" in vendor_obj.config_data:
+            secret_key = vendor_obj.config_data["secret_key"]
         else:
             raise Exception("Invalid Config in Campaign")
         stripe.api_key = secret_key
@@ -320,7 +293,7 @@ class stripe(VendorInterface):
         except SubscriptionStatus.DoesNotExist:
             pass
 
-        subscription_status = self.full_cancellation(order_info)
+        subscription_status = self.full_cancellation(order_info,vendor_obj)
         sub_status.subscription_status=False
         sub_status.save()
 
@@ -335,7 +308,6 @@ class stripe(VendorInterface):
 
         data = kwargs['data']
         vendor_obj = kwargs['vendor_obj']
-
         if 'type' not in data:
             raise Exception("Missing Type")
 
@@ -358,52 +330,42 @@ class stripe(VendorInterface):
 
         store_type = 1
         amount = 0
-        if 'PAYPAL-TRANSMISSION-ID' in request.headers:
-            store_type = 2
-            subscription_id = request.data['resource']['id']
-            try:
-                order = Order.objects.get(customer_order_id=subscription_id)
-                amount = order.order_price.price_point
-            except Order.DoesNotExist:
-                raise Exception("Order Does Not Exist")
-            event_type = request.data['event_type']
-
+        
+        payload = request.body.decode('utf-8')
+        signature = request.headers.get('stripe-signature')
+        request_data = request.data
+        data = request_data['data']
+        event_type = request_data['type']
+        if event_type in ['invoice.paid', 'invoice.payment_succeeded']:
+            order_id = data['object']['lines']['data'][0]['metadata']['order_id']
         else:
-            payload = request.body.decode('utf-8')
-            signature = request.headers.get('stripe-signature')
-            request_data = request.data
-            data = request_data['data']
-            event_type = request_data['type']
-            if event_type in ['invoice.paid', 'invoice.payment_succeeded']:
-                order_id = data['object']['lines']['data'][0]['metadata']['order_id']
-            else:
-                order_id = data['object']['metadata']['order_id']
+            order_id = data['object']['metadata']['order_id']
+        try:
+            order = Order.objects.get(order_id=order_id)
+        except Order.DoesNotExist:
+            raise Exception("Order Does Not Exist")
+
+        if 'webhook_secret' not in order.campaign.config_data:
+            raise Exception("Webhook secret missing")
+        webhook_secret = SubscribeVendor.config_data['webhook_secret']
+
+        event = stripe.Webhook.construct_event(
+            payload=payload, sig_header=signature, secret=webhook_secret)
+
+        data = event['data']
+        if data['object'] and data['object']['amount_paid']:
+            # amount = data['object']['amount_paid']
             try:
-                order = Order.objects.get(order_id=order_id)
-            except Order.DoesNotExist:
-                raise Exception("Order Does Not Exist")
-
-            if 'webhook_secret' not in order.campaign.config_data:
-                raise Exception("Webhook secret missing")
-            webhook_secret = SubscribeVendor.config_data['webhook_secret']
-
-            event = stripe.Webhook.construct_event(
-                payload=payload, sig_header=signature, secret=webhook_secret)
-
-            data = event['data']
-            if data['object'] and data['object']['amount_paid']:
-                # amount = data['object']['amount_paid']
-                try:
-                    amount = int(data['object']['amount_paid']) / 100
-                except:
-                    amount = order.order_price.price_point
+                amount = int(data['object']['amount_paid']) / 100
+            except:
+                amount = order.order_price.price_point
+        else:
+            if order.order_price:
+                amount = order.order_price.price_point
             else:
-                if order.order_price:
-                    amount = order.order_price.price_point
-                else:
-                    amount = 0
-            # Get the type of webhook event sent - used to check the status of PaymentIntents.
-            event_type = event['type']
+                amount = 0
+        # Get the type of webhook event sent - used to check the status of PaymentIntents.
+        event_type = event['type']
         if event_type in ['customer.subscription.deleted', 'BILLING.SUBSCRIPTION.CANCELLED']:
             if order.cancel_requested == False:
                 order.cancel_requested = True

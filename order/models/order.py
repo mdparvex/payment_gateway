@@ -37,11 +37,11 @@ class Order(models.Model):
     
     def get_future_cancel_date(self):
         if self.plan_type == 'month':
-            new_date = datetime.now(datetime.timezone.utc) + timedelta(days=30)
+            new_date = datetime.now() + timedelta(days=30)
         elif self.plan_type == 'day':
-            new_date = datetime.now(datetime.timezone.utc) + timedelta(days=1)
+            new_date = datetime.now() + timedelta(days=1)
         elif self.plan_type == 'week':
-            new_date = datetime.now(datetime.timezone.utc) + timedelta(days=7)
+            new_date = datetime.now() + timedelta(days=7)
         else:
             #@TODO need to verify if it is past 1 year
             twelve_month = 30*12
