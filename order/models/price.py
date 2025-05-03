@@ -2,7 +2,7 @@ from django.db import models
 import uuid
 
 def get_unique_price_id():
-    return 'order_' + str(uuid.uuid4())
+    return 'price_' + str(uuid.uuid4())
 
 class Price(models.Model):
     PLAN_CHOICES = (

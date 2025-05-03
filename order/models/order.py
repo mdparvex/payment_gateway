@@ -2,6 +2,7 @@ from django.db import models
 import uuid
 from .customer import Customer
 from .price import Price
+from datetime import timedelta, datetime
 
 def get_unique_order_id():
     return 'order_' + str(uuid.uuid4())
@@ -33,3 +34,16 @@ class Order(models.Model):
 
     def __str__(self):
         return self.order_id
+    
+    def get_future_cancel_date(self):
+        if self.plan_type == 'month':
+            new_date = datetime.now(datetime.timezone.utc) + timedelta(days=30)
+        elif self.plan_type == 'day':
+            new_date = datetime.now(datetime.timezone.utc) + timedelta(days=1)
+        elif self.plan_type == 'week':
+            new_date = datetime.now(datetime.timezone.utc) + timedelta(days=7)
+        else:
+            #@TODO need to verify if it is past 1 year
+            twelve_month = 30*12
+            new_date = datetime.now() + timedelta(days=twelve_month)
+        return new_date

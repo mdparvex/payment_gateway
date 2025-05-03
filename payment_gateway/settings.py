@@ -112,7 +112,12 @@ if DB_IS_AVAIL:
         }
     }
 
-
+# stripe_module
+STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY')
+STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
+WEBHOOK_SECRETE = os.getenv('WEBHOOK_SECRETE')
+SITE_BASE_URL = os.getenv('SITE_BASE_URL')
+STRIPE_RETURN_URL = os.getenv('STRIPE_RETURN_URL')
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 

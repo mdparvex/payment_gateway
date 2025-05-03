@@ -8,6 +8,7 @@ class SubscribeVendor(models.Model):
     user_friendly_name = models.CharField(max_length=100, default="", blank=True)
     vendor_name = models.CharField(max_length=100)
     custom_arg = models.TextField(null=True, default=None, blank=True)
+    config_data = models.JSONField(default=None, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now_add=True)
     vendor_redirect_url = models.TextField(null=True, blank=True)

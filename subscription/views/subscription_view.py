@@ -3,6 +3,7 @@ from django.http import JsonResponse
 from rest_framework import status
 import importlib
 from ..models.subscribe_vendor import SubscribeVendor
+from ..models.subscription_status import SubscriptionStatus
 
 
 @api_view(['GET'])
@@ -86,3 +87,26 @@ def webhook_vendor(request, vendor_id):
     content['status'] = 1
     return JsonResponse(content, status=status.HTTP_202_ACCEPTED)
 
+@api_view(['POST'])
+# @authentication_classes((TokenAuthentication,))
+# @permission_classes((IsAuthenticated,))
+def check_vendor_subscription_status(request):
+    content = {
+        'status': 0
+    }
+    if 'login_access_code' in request.data and 'internal_api_key' in request.data:
+        internal_api_key = request.data['internal_api_key']
+        login_access_code = request.data['login_access_code']
+        try:
+            subscription = SubscriptionStatus.objects.get(login_access_code=login_access_code,
+                                                          subscribe_vendor__internal_api_key=internal_api_key)
+            content['message'] = 'Success'
+            content['status'] = 1
+            content['subscription_status'] = subscription.subscription_status
+            return JsonResponse(content, status=status.HTTP_200_OK)
+        except:
+            content['message'] = 'Bad Request'
+            return JsonResponse(content, status=status.HTTP_400_BAD_REQUEST)
+    else:
+        content['message'] = 'Bad Request'
+        return JsonResponse(content, status=status.HTTP_400_BAD_REQUEST)
