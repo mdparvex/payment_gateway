@@ -1,2 +1,4 @@
 # payment_gateway
-this is payment gateway API to use any saas based application
+This is a payment gateway API to use in any saas based application
+
+# Under development, will provide details later.
